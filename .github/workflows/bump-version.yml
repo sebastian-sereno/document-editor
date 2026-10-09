@@ -1,0 +1,63 @@
+name: Bump Development Version After Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  bump-development-version:
+    runs-on: ubuntu-latest
+
+    if: ${{ !github.event.release.prerelease }}
+
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v6
+        with:
+          ref: development
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22.x"
+
+      - name: Set next development version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+
+          # Start from the version that was just released.
+          npm version "$RELEASE_VERSION" \
+            --no-git-tag-version \
+            --allow-same-version
+
+          # Advance to the next patch's first development version.
+          npm version prerelease \
+            --preid=dev \
+            --no-git-tag-version
+
+          echo "Development version: $(node -p "require('./package.json').version")"
+
+      - name: Commit and push to development
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+users.noreply.github.com"
+
+          git add package.json
+
+          if [ -f package-lock.json ]; then
+            git add package-lock.json
+          fi
+
+          if git diff --cached --quiet; then
+            echo "Development version is already up to date."
+            exit 0
+          fi
+
+          VERSION=$(node -p "require('./package.json').version")
+          git commit -m "chore: bump development version to ${VERSION}"
+          git push origin HEAD:development

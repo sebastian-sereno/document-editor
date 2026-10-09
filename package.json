@@ -51,7 +51,10 @@
   ],
   "license": "All Rights Reserved",
   "main": "./dist/index.js",
-  "name": "emmet-dom-reconciler",
+  "name": "@sebastian-sereno/emmet-dom-reconciler",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",

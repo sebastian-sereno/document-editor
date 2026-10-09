@@ -51,7 +51,7 @@
   ],
   "license": "All Rights Reserved",
   "main": "./dist/index.js",
-  "name": "emmet-diff-selector",
+  "name": "emmet-dom-reconciler",
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",

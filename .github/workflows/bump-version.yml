@@ -1,63 +1,197 @@
-name: Bump Development Version After Release
+name: Check Development Version
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - development
+  workflow_dispatch:
 
 permissions:
   contents: write
 
-jobs:
-  bump-development-version:
-    runs-on: ubuntu-latest
+concurrency:
+  group: check-development-version
+  cancel-in-progress: false
 
-    if: ${{ !github.event.release.prerelease }}
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout development branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5
         with:
           ref: development
+          fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: "22.x"
 
-      - name: Set next development version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - name: Configure Git
         run: |
-          RELEASE_VERSION="${RELEASE_TAG#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Start from the version that was just released.
-          npm version "$RELEASE_VERSION" \
+      - name: Find last development version update
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+          if [[ ! "$CURRENT_VERSION" =~ ^(.+)-dev\.([0-9]+)$ ]]; then
+            echo "::error::Expected a version ending in -dev.N, got: $CURRENT_VERSION"
+            exit 1
+          fi
+
+          BASE_VERSION="${BASH_REMATCH[1]}"
+          DEV_NUMBER="${BASH_REMATCH[2]}"
+
+          echo "Current version: $CURRENT_VERSION"
+
+          VERSION_COMMIT=""
+
+          # Find the commit that changed package.json to the
+          # current development version.
+          while IFS= read -r COMMIT; do
+            [[ -z "$COMMIT" ]] && continue
+
+            COMMIT_VERSION=$(git show "$COMMIT:package.json" |
+              node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+
+            [[ "$COMMIT_VERSION" == "$CURRENT_VERSION" ]] || continue
+
+            PARENT=$(git rev-parse "$COMMIT^" 2>/dev/null || true)
+
+            if [[ -z "$PARENT" ]]; then
+              VERSION_COMMIT="$COMMIT"
+              break
+            fi
+
+            PARENT_VERSION=$(git show "$PARENT:package.json" |
+              node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+
+            if [[ "$PARENT_VERSION" != "$CURRENT_VERSION" ]]; then
+              VERSION_COMMIT="$COMMIT"
+              break
+            fi
+          done < <(git log --format=%H -- package.json)
+
+          if [[ -z "$VERSION_COMMIT" ]]; then
+            echo "::error::Could not find the commit that introduced $CURRENT_VERSION."
+            exit 1
+          fi
+
+          echo "Version was last updated in: $VERSION_COMMIT"
+
+          echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "dev_number=$DEV_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "version_commit=$VERSION_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Check commits since last version update
+        id: changes
+        shell: bash
+        env:
+          VERSION_COMMIT: ${{ steps.baseline.outputs.version_commit }}
+        run: |
+          set -euo pipefail
+
+          CODE_CHANGE=false
+          CONVENTIONAL_COMMIT_REGEX='^(feat|fix|perf|refactor)(\([^)]*\))?(!)?:'
+
+          COMMITS=$(git rev-list --reverse "$VERSION_COMMIT..HEAD")
+
+          if [[ -z "$COMMITS" ]]; then
+            echo "No commits since the last version update."
+          fi
+
+          while IFS= read -r COMMIT; do
+            [[ -z "$COMMIT" ]] && continue
+
+            MESSAGE=$(git log -1 --format=%s "$COMMIT")
+            echo "Checking commit: $MESSAGE"
+
+            if ! [[ "$MESSAGE" =~ $CONVENTIONAL_COMMIT_REGEX ]]; then
+              echo "Ignoring non-code commit type: $MESSAGE"
+              continue
+            fi
+
+            FILES=$(git diff-tree \
+              --no-commit-id \
+              --name-only \
+              -r "$COMMIT")
+
+            while IFS= read -r FILE; do
+              [[ -z "$FILE" ]] && continue
+
+              case "$FILE" in
+                docs/*|*.md|.github/*|*.yml|*.yaml|LICENSE|.gitignore|package.json|package-lock.json)
+                  ;;
+                *)
+                  echo "Meaningful code change: $FILE"
+                  CODE_CHANGE=true
+                  break
+                  ;;
+              esac
+            done <<< "$FILES"
+
+            if [[ "$CODE_CHANGE" == "true" ]]; then
+              break
+            fi
+          done <<< "$COMMITS"
+
+          echo "code_change=$CODE_CHANGE" >> "$GITHUB_OUTPUT"
+
+      - name: Increment development version
+        if: steps.changes.outputs.code_change == 'true'
+        id: bump
+        shell: bash
+        env:
+          CURRENT_VERSION: ${{ steps.baseline.outputs.current_version }}
+          BASE_VERSION: ${{ steps.baseline.outputs.base_version }}
+          DEV_NUMBER: ${{ steps.baseline.outputs.dev_number }}
+        run: |
+          set -euo pipefail
+
+          NEXT_DEV_NUMBER=$((DEV_NUMBER + 1))
+          NEXT_VERSION="${BASE_VERSION}-dev.${NEXT_DEV_NUMBER}"
+
+          npm version "$NEXT_VERSION" \
             --no-git-tag-version \
             --allow-same-version
 
-          # Advance to the next patch's first development version.
-          npm version prerelease \
-            --preid=dev \
-            --no-git-tag-version
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version updated: $CURRENT_VERSION -> $NEXT_VERSION"
 
-          echo "Development version: $(node -p "require('./package.json').version")"
-
-      - name: Commit and push to development
+      - name: Commit and push version
+        if: steps.changes.outputs.code_change == 'true'
+        shell: bash
+        env:
+          NEXT_VERSION: ${{ steps.bump.outputs.next_version }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+users.noreply.github.com"
+          set -euo pipefail
 
           git add package.json
 
-          if [ -f package-lock.json ]; then
+          if [[ -f package-lock.json ]]; then
             git add package-lock.json
           fi
 
           if git diff --cached --quiet; then
-            echo "Development version is already up to date."
+            echo "No version changes to commit."
             exit 0
           fi
 
-          VERSION=$(node -p "require('./package.json').version")
-          git commit -m "chore: bump development version to ${VERSION}"
+          git commit -m "chore: bump development version to ${NEXT_VERSION}"
           git push origin HEAD:development
+
+      - name: Report no changes
+        if: steps.changes.outputs.code_change != 'true'
+        run: |
+          echo "No meaningful code changes found since the last version update."
+          echo "Development version remains unchanged."

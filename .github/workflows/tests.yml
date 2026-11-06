@@ -4,8 +4,47 @@ on:
   push:
   pull_request:
 
+permissions:
+  pull-requests: read
+  contents: read
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.before }}
+          filters: |
+            code:
+              - 'src/**'
+              - 'test/**'
+              - 'tests/**'
+              - '**/*.test.*'
+              - '**/*.spec.*'
+              - 'package.json'
+              - 'yarn.lock'
+              - '.yarnrc.yml'
+              - '.yarn/**'
+              - 'tsconfig.json'
+              - 'vite.config.*'
+              - 'vitest.config.*'
+              - 'jest.config.*'
+              - 'eslint.config.*'
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+
     runs-on: ubuntu-latest
 
     steps:

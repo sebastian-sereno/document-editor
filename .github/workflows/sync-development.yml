@@ -1,0 +1,105 @@
+name: Reset Development to Main
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+  release:
+    types:
+      - published
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reset-development-to-main
+  cancel-in-progress: false
+
+jobs:
+  reset-development:
+    name: Reset development to main
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true) ||
+      github.event_name == 'release'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Reset development to main
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main development
+
+          # Always reset development to match main.
+          git checkout -B development origin/main
+
+          # Skip version updates for patch releases.
+          if [[ "${RELEASE_TAG:-}" =~ -patch\. ]]; then
+            echo "Patch release detected; keeping version unchanged."
+          # Skip version updates for CI and chore PRs.
+          elif [[ "${PR_TITLE:-}" =~ ^(ci:|chore:|ci\(|chore\() ]]; then
+            echo "CI/chore PR detected; keeping version unchanged."
+          else
+            # Use the release tag when available; otherwise use main's version.
+            if [[ -n "${RELEASE_TAG:-}" ]]; then
+              BASE_VERSION="${RELEASE_TAG#v}"
+              BASE_VERSION="${BASE_VERSION%%-*}"
+              BASE_VERSION="${BASE_VERSION%%+*}"
+            else
+              BASE_VERSION=$(node -p "
+                const v = require('./package.json').version;
+                v.split('-')[0].split('+')[0];
+              ")
+            fi
+
+            # Advance to the next patch prerelease.
+            BASE_VERSION=$(node -e "
+              const [major, minor, patch] = process.argv[1].split('.').map(Number);
+              console.log([major, minor, patch + 1].join('.'));
+            " "$BASE_VERSION")
+
+            npm version "${BASE_VERSION}-dev.0" --no-git-tag-version
+          fi
+
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Resetting development to ${VERSION}"
+
+          git add package.json
+          if [ -f package-lock.json ]; then
+            git add package-lock.json
+          fi
+
+          # Commit only if the version files changed.
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: reset development version to ${VERSION}"
+          fi
+
+          git push --force-with-lease origin HEAD:development

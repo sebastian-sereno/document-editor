@@ -1,8 +1,11 @@
-# DOM Reconciler
+# TypeScript DOM Editing Engine
 
-> A lightweight DOM reconciliation utility that updates an existing DOM tree from an Emmet-like abbreviation without unnecessarily replacing existing elements.
+A modular, transaction-aware TypeScript DOM editing engine designed around centralized document modification, logical editing positions, operation management, and reliable undo/redo functionality.
 
-DOMReconciler applies structural and content changes while preserving DOM node identity wherever possible. This helps avoid unnecessary DOM mutations and keeps existing element references intact.
+## Project Philosophy
+> The goal is not simply to manipulate DOM elements.
+
+The goal is to build a predictable, extensible, and transactionally reliable editing engine in which every document modification is coordinated, every editing position is managed, and every committed change can be reversed.
 
 ## Features
 - **Preserves element identity:** Updates existing elements instead of replacing unaffected nodes.
@@ -12,177 +15,70 @@ DOMReconciler applies structural and content changes while preserving DOM node i
 - **Idempotent updates:** Applying the same abbreviation multiple times produces no additional mutations.
 - **Mutation reporting:** Returns information about DOM mutations performed during reconciliation.
 
+## Overview
+The TypeScript DOM Editing Engine is a modular editing framework for manipulating structured DOM documents while maintaining consistent editing positions, transactional integrity, and reversible document modifications.
+
+The project is designed with a strong separation of responsibilities. Each subsystem manages a specific aspect of editing, while centralized operation management coordinates all document modifications.
+
+The architecture aims to support:
+
+- Structured DOM manipulation.
+- Logical caret and cursor management.
+- Multiple editing positions.
+- Atomic document transactions.
+- Undo and redo functionality.
+- Centralized modification execution.
+- Position reconciliation after document changes.
+- Text, HTML, and DOM node insertion.
+- Extensible formatting operations.
+- Document integrity validation.
+- A unified public Editor API.
+
+The long-term goal is to provide a reliable foundation for building advanced browser-based editing systems.
+
+## Development Roadmap
+- [x] Define operation interface.
+- [x] Define operation result.
+- [x] Draft centralized execution manager.
+- [x] Draft lifecycle hooks.
+- [x] Draft transaction integration.
+- [x] Draft descending execution.
+- [x] Draft overlap detection.
+- [x] Draft operation tests.
+- [x] Supply and review core dependencies.
+- [ ] Fix failure-status handling.
+- [ ] Refine transaction recovery reporting.
+- [ ] Add modification position mapping.
+- [ ] Add CaretManager reconciliation.
+- [ ] Integrate CursorManager reconciliation.
+- [ ] Verify nested transaction failure behavior.
+- [ ] Complete overlap boundary tests.
+- [ ] Complete operation tests.
+- [ ] Run transaction regression tests.
+- [ ] Run full test suite.
+- [ ] Verify TypeScript compilation.
+- [ ] Verify production build.
+
 ## Installation
+The project uses TypeScript and Vitest.
 
-Installation instructions are not yet specified.
-
-## Usage
-
-Import DOMReconciler and create an instance:
-
-```ts
-import { DOMReconciler } from './src/reconciler';
-
-const root = document.createElement('div');
-const reconciler = new DOMReconciler();
-
-const result = reconciler.apply(root, 'div>section>h1{Welcome}+p{Hello world}+button{Save}');
-
-console.log(root);
-console.log(result.mutations);
-```
-
-The `apply()` method takes two arguments:
-
-| Argument     | Description                                    |
-|--------------|------------------------------------------------|
-| root         | The DOM element to reconcile.                  |
-| abbreviation | A string describing the desired DOM structure. |
-
-It returns a result containing a mutations collection describing the changes made.
-
-## Abbreviation Syntax
-
-The reconciler accepts an Emmet-like syntax for describing DOM structures.
-
-Examples:
-
-### Nested elements
-```
-div>section>h1
-```
-
-Creates a nested structure:
-
-```HTML
-<div>
-  <section>
-    <h1></h1>
-  </section>
-</div>
-```
-
-Sibling elements
-```
-div>h1+p+button
-```
-
-Creates multiple sibling elements:
-
-```HTML
-<div>
-  <h1></h1>
-  <p></p>
-  <button></button>
-</div>
-```
-
-### Text content
-
-Use curly braces to specify text content:
-
-```
-div>h1{Welcome}+p{Hello world}
-```
-
-### Attributes
-
-Use square brackets to specify attributes:
-
-```
-div>ul>li[data-key="a"]{Item A}
-```
-
-### Combining syntax
-```
-div>section>h1{Welcome}+p{Description}+button[type="submit"]{Save}
-```
-
-## Reconciliation Behavior
-### 1. Preserving unaffected elements
-
-When text content changes, existing DOM elements are preserved.
-
-For example, changing a paragraph from Old text to New text updates the paragraph's content without replacing the paragraph, its parent, or neighboring elements.
-
-### 2. Removing obsolete children
-
-When an element is removed from the desired structure, the reconciler removes that child while preserving its parent and remaining children.
-
-### 3. Reordering keyed elements
-
-Elements with matching data-key attributes can be reordered without replacing their underlying DOM nodes.
-
-For example:
-
-Before:
-
-```HTML
-<ul>
-  <li data-key="a">A</li>
-  <li data-key="b">B</li>
-  <li data-key="c">C</li>
-</ul>
-```
-
-Desired order:
-
-```
-ul>li[data-key="c"]{C}+li[data-key="a"]{A}+li[data-key="b"]{B}
-```
-
-The reconciler moves the existing elements into the new order while preserving their references.
-
-### 4. Idempotency
-
-Applying the same abbreviation to an already reconciled DOM tree should not produce additional mutations.
-
-This means repeated calls with an unchanged desired structure leave existing elements intact.
-
-## Testing
-
-The project uses Vitest for testing.
-
-The test suite covers four core behaviors:
-
-| Test                          | Expected behavior                                                 |
-|-------------------------------|-------------------------------------------------------------------|
-| Preserves unaffected elements | Existing elements remain the same DOM objects after text updates. |
-| Removes obsolete children     | Unneeded children are removed without replacing their parent.     |
-| Reorders keyed elements       | Existing keyed elements are moved without replacement.            |
-| Idempotent reconciliation     | Reapplying an unchanged structure produces zero mutations.        |
-
-Run the tests with:
-
+Install dependencies:
 ```bash
-npx vitest
+npm install
 ```
+Build and test commands depend on the scripts configured in package.json.
 
-Or, if configured in package.json:
-
+Development Commands
 ```bash
+# Run tests
 npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run TypeScript type checking
+npm run typecheck
+
+# Build production output
+npm run build
 ```
-
-### Design Goals
-
-The primary goal of DOMReconciler is to minimize unnecessary DOM changes.
-
-Rather than rebuilding an entire subtree whenever the desired markup changes, it attempts to reconcile the existing tree with the requested structure.
-
-This approach provides several benefits:
-
-- Preserves references to existing DOM elements.
-- Reduces unnecessary DOM operations.
-- Supports efficient structural updates.
-- Makes repeated reconciliation predictable.
-- Allows consumers to retain references to elements across updates.
-
-## Project Status
-
-The current test suite validates the core reconciliation behaviors:
-
-- Text updates.
-- Removal of obsolete children.
-- Reordering keyed elements.
-- Idempotent updates.

@@ -2,6 +2,7 @@ import type { CaretManager } from '../caret/CaretManager.js';
 import type { EditorDocument } from '../core/Document.js';
 import type { DocumentPosition } from '../core/DocumentPosition.js';
 import type { CursorManager } from '../cursors/CursorManager.js';
+import type { SelectionManager } from '../selection/SelectionManager.js';
 
 import type { TransactionManager } from '../transactions/TransactionManager.js';
 
@@ -13,6 +14,7 @@ export interface OperationManagerOptions {
   readonly allowNestedTransactions?: boolean;
   readonly caret?: CaretManager;
   readonly cursors?: CursorManager;
+  readonly selection?: SelectionManager;
 }
 
 interface PreparedModification {
@@ -86,6 +88,7 @@ export class OperationManager {
 
         this.options.caret?.reconcile(mapper);
         this.options.cursors?.reconcile(mapper);
+        this.options.selection?.reconcile(mapper);
       }
 
       operation.afterExecute?.(context);

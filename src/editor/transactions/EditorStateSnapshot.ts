@@ -3,6 +3,7 @@ import type { EditorDocument } from '../core/Document.js';
 import type { DocumentPosition } from '../core/DocumentPosition.js';
 import type { Cursor } from '../cursors/Cursor.js';
 import type { CursorManager } from '../cursors/CursorManager.js';
+import type { SelectionManager } from '../selection/SelectionManager.js';
 import type { DocumentSnapshot } from './DocumentSnapshot.js';
 import { captureDocument } from './DocumentSnapshot.js';
 import { capturePosition, type PositionSnapshot, restorePosition } from './PositionSnapshot.js';
@@ -16,12 +17,19 @@ export interface EditorStateSnapshot {
   readonly document: DocumentSnapshot;
   readonly caret: PositionSnapshot | null;
   readonly cursors: readonly CursorPositionSnapshot[];
+  readonly selection?: SelectionPositionSnapshot | null;
 }
 
 export interface EditorStateContext {
   readonly document: EditorDocument;
   readonly caret: CaretManager;
   readonly cursors: CursorManager;
+  readonly selection?: SelectionManager;
+}
+
+export interface SelectionPositionSnapshot {
+  readonly anchor: PositionSnapshot;
+  readonly focus: PositionSnapshot;
 }
 
 export function captureEditorState(context: EditorStateContext): EditorStateSnapshot {
@@ -37,6 +45,17 @@ export function captureEditorState(context: EditorStateContext): EditorStateSnap
     })),
 
     document: captureDocument(root),
+
+    ...(context.selection
+      ? {
+          selection: context.selection.get()
+            ? {
+                anchor: capturePosition(root, context.selection.get()!.anchor),
+                focus: capturePosition(root, context.selection.get()!.focus),
+              }
+            : null,
+        }
+      : {}),
   };
 }
 
@@ -99,6 +118,13 @@ export function restoreEditorState(
   const liveCaretSnapshot = snapshot.caret;
   const liveCursorSnapshots = snapshot.cursors;
 
+  const restoredSelection = snapshot.selection
+    ? {
+        anchor: restorePosition(stagedRoot, snapshot.selection.anchor),
+        focus: restorePosition(stagedRoot, snapshot.selection.focus),
+      }
+    : null;
+
   // Commit the document.
   root.replaceChildren(...Array.from(stagedRoot.childNodes));
 
@@ -118,4 +144,13 @@ export function restoreEditorState(
   }
 
   context.cursors.restoreAll(liveCursors);
+
+  if (context.selection) {
+    if (snapshot.selection) {
+      context.selection.set(
+        restorePosition(root, snapshot.selection.anchor),
+        restorePosition(root, snapshot.selection.focus),
+      );
+    } else context.selection.clear();
+  }
 }

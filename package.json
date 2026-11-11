@@ -64,6 +64,6 @@
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "types": "./dist/index.d.js",
+  "types": "./dist/index.d.ts",
   "version": "1.0.0"
 }

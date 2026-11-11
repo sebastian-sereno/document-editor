@@ -17,6 +17,15 @@ export type {
   OperationStatus,
 } from './operations/OperationResult.js';
 export {
+  createSelection,
+  type Selection,
+  type SelectionDirection,
+} from './selection/Selection.js';
+export {
+  SelectionManager,
+  type SelectionMapper,
+} from './selection/SelectionManager.js';
+export {
   captureDocument,
   restoreDocument,
 } from './transactions/DocumentSnapshot.js';
